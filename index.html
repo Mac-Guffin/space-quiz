@@ -94,6 +94,12 @@
       color: var(--console-muted);
     }
     .console-name { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; font-weight: 700; letter-spacing: 1.4px; color: var(--ink); }
+    #quiz .shuffle-setting { margin-bottom: 19px; }
+    #quiz .shuffle-label { display: flex; align-items: center; gap: 9px; width: fit-content; font-size: 13px; cursor: pointer; }
+    #quiz .shuffle-label input { width: 18px; height: 18px; flex: 0 0 18px; margin: 0; accent-color: var(--accent); }
+    #quiz .shuffle-label input:focus-visible { outline: 3px solid var(--accent); outline-offset: 5px; }
+    #quiz .shuffle-label:has(input:disabled) { cursor: default; }
+    #quiz .shuffle-help { margin: 7px 0 0; font-size: 11px; color: var(--console-muted); }
     .console-mode { display: inline-flex; align-items: center; gap: 6px; }
     .console-mode::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
     .console-readout {
@@ -242,6 +248,10 @@
             <span class="console-name" lang="en">MISSION CONTROL</span>
             <span class="console-mode">로컬 모드 · 관제 준비</span>
           </div>
+          <div class="shuffle-setting">
+            <label class="shuffle-label" for="shuffle"><input type="checkbox" id="shuffle" aria-describedby="shuffle-help question" autocomplete="off">문제 순서 섞기</label>
+            <p class="shuffle-help" id="shuffle-help">첫 답변 전까지 변경할 수 있어요. 바꾸면 첫 질문에 바로 적용돼요.</p>
+          </div>
           <div class="category">
             <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="5" stroke="currentColor" stroke-width="1.4"/><ellipse cx="10" cy="10" rx="10" ry="3" transform="rotate(-30 10 10)" stroke="currentColor" stroke-width="1.4"/></svg>
             <span id="category">태양계 탐험</span>
@@ -297,10 +307,31 @@
       { category: "더 넓은 우주로", question: "태양계가 속해 있는 은하의 이름은 무엇일까요?", options: ["안드로메다은하", "삼각형은하", "우리은하", "대마젤란은하"], answer: 2, explanation: "태양계는 우리은하에 속해 있어요. 밤하늘의 은하수는 우리가 은하 안쪽에서 바라본 수많은 별의 빛이랍니다." }
     ];
     const $ = id => document.getElementById(id);
+    $("shuffle").checked = false;
     let current = 0;
     let score = 0;
     let answered = false;
     let choices = [];
+    let questionOrder = createQuestionOrder();
+
+    function createQuestionOrder() {
+      const order = questions.map((_, index) => index);
+      if ($("shuffle").checked) {
+        for (let index = order.length - 1; index > 0; index--) {
+          const other = Math.floor(Math.random() * (index + 1));
+          [order[index], order[other]] = [order[other], order[index]];
+        }
+      }
+      return order;
+    }
+
+    function updateShuffleSetting() {
+      const locked = choices.length > 0;
+      $("shuffle").disabled = locked;
+      $("shuffle-help").textContent = locked
+        ? "탐험 중에는 순서가 유지돼요. 다시 탐험하면 설정을 바꿀 수 있어요."
+        : "첫 답변 전까지 변경할 수 있어요. 바꾸면 첫 질문에 바로 적용돼요.";
+    }
 
     function updateProgress(completed) {
       $("fill").style.width = `${completed / questions.length * 100}%`;
@@ -309,8 +340,9 @@
     }
 
     function renderQuestion(focus = false) {
-      const item = questions[current];
+      const item = questions[questionOrder[current]];
       answered = false;
+      updateShuffleSetting();
       $("question-count").innerHTML = `<strong>${String(current + 1).padStart(2, "0")}</strong> / ${questions.length} 질문`;
       $("category").textContent = item.category;
       $("quiz").dataset.state = "awaiting";
@@ -346,7 +378,8 @@
       $("quiz").dataset.state = "review";
       $("console-state").textContent = "응답 기록 완료";
       choices.push(selected);
-      const item = questions[current];
+      updateShuffleSetting();
+      const item = questions[questionOrder[current]];
       const correct = selected === item.answer;
       if (correct) score += 10;
       $("score").textContent = `${score}점`;
@@ -402,7 +435,7 @@
       $("review-list").replaceChildren();
       let count = 0;
       choices.forEach((selected, index) => {
-        const item = questions[index];
+        const item = questions[questionOrder[index]];
         if (wrongOnly && selected === item.answer) return;
         count++;
         const entry = document.createElement("div");
@@ -424,6 +457,11 @@
     $("review-all").addEventListener("click", () => renderReview());
     $("review-wrong").addEventListener("click", () => renderReview("wrong"));
 
+    $("shuffle").addEventListener("change", () => {
+      if (choices.length > 0) return;
+      questionOrder = createQuestionOrder();
+      renderQuestion();
+    });
     $("next").addEventListener("click", () => {
       if (!answered) return;
       if (current === questions.length - 1) showResults();
@@ -437,6 +475,7 @@
       current = 0;
       score = 0;
       choices = [];
+      questionOrder = createQuestionOrder();
       $("score").textContent = "0점";
       $("result").hidden = true;
       $("quiz").hidden = false;
