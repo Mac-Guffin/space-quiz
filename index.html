@@ -164,6 +164,13 @@
     .stats span { font-size: 11px; color: var(--muted); }
     .review { text-align: left; font-size: 12px; border-top: 1px solid var(--line); margin-top: 22px; padding-top: 16px; }
     summary { cursor: pointer; color: var(--muted); }
+    .review-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-top: 16px; }
+    .review-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+    .review-filter { min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
+    .review-filter[aria-pressed="true"] { border-color: var(--accent); background: var(--soft); font-weight: 700; }
+    .review-filter:hover { border-color: var(--accent); }
+    .review-count { margin: 0; color: var(--ink); }
+    .review-empty { padding: 16px 0; color: var(--ink); }
     .review-item { padding: 14px 0; border-bottom: 1px solid var(--line); }
     .review-item strong { display: block; margin-bottom: 5px; font-size: 13px; }
     .review-item p { color: var(--muted); margin: 4px 0; }
@@ -258,7 +265,18 @@
           <p class="result-caption">열 번의 호기심이 쌓인, 나의 탐험 기록</p>
           <div class="stats"><div><strong id="correct-count" style="color:var(--green)"></strong><span>맞힌 질문</span></div><div><strong id="wrong-count" style="color:var(--red)"></strong><span>새로 배운 질문</span></div></div>
           <button class="next" id="restart">다시 탐험하기 <span aria-hidden="true">↗</span></button>
-          <details class="review"><summary>탐험 기록 살펴보기</summary><div id="review-list"></div></details>
+          <details class="review">
+            <summary>탐험 기록 살펴보기</summary>
+            <div class="review-toolbar">
+              <div class="review-filters" role="group" aria-label="복습 기록 필터">
+                <button type="button" class="review-filter" id="review-all" aria-pressed="true" aria-controls="review-list review-empty">전체</button>
+                <button type="button" class="review-filter" id="review-wrong" aria-pressed="false" aria-controls="review-list review-empty">틀린 문제만</button>
+              </div>
+              <p class="review-count" id="review-count" role="status" aria-live="polite" aria-atomic="true"></p>
+            </div>
+            <p class="review-empty" id="review-empty" hidden>틀린 문제가 없어요</p>
+            <div id="review-list"></div>
+          </details>
         </div>
         <p class="under-card"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m8 1 1.8 4.6L15 8l-5.2 2.4L8 15l-1.8-4.6L1 8l5.2-2.4z" stroke="currentColor"/></svg><span id="bottom-note">시간 제한 없이, 호기심이 이끄는 대로.</span></p>
       </section>
@@ -372,23 +390,39 @@
       $("correct-count").textContent = `${score / 10}개`;
       $("wrong-count").textContent = `${questions.length - score / 10}개`;
       $("bottom-note").textContent = "작은 호기심 하나가, 더 넓은 우주로.";
+      renderReview();
+      $("result-title").focus({ preventScroll: true });
+      $("result").scrollIntoView({ behavior: "auto", block: "nearest" });
+    }
+
+    function renderReview(filter = "all") {
+      const wrongOnly = filter === "wrong";
+      $("review-all").setAttribute("aria-pressed", String(!wrongOnly));
+      $("review-wrong").setAttribute("aria-pressed", String(wrongOnly));
       $("review-list").replaceChildren();
-      questions.forEach((item, index) => {
+      let count = 0;
+      choices.forEach((selected, index) => {
+        const item = questions[index];
+        if (wrongOnly && selected === item.answer) return;
+        count++;
         const entry = document.createElement("div");
         entry.className = "review-item";
         const title = document.createElement("strong");
-        title.textContent = `${choices[index] === item.answer ? "✓" : "✕"} ${index + 1}. ${item.question}`;
+        title.textContent = `${selected === item.answer ? "✓" : "✕"} ${index + 1}. ${item.question}`;
         const answer = document.createElement("p");
         answer.className = "review-answer";
-        answer.textContent = `정답: ${item.options[item.answer]} · 내 선택: ${item.options[choices[index]]}`;
+        answer.textContent = `정답: ${item.options[item.answer]} · 내 선택: ${item.options[selected]}`;
         const description = document.createElement("p");
         description.textContent = item.explanation;
         entry.append(title, answer, description);
         $("review-list").append(entry);
       });
-      $("result-title").focus({ preventScroll: true });
-      $("result").scrollIntoView({ behavior: "auto", block: "nearest" });
+      $("review-count").textContent = `${wrongOnly ? "틀린 문제" : "전체"} ${count}문항 표시`;
+      $("review-empty").hidden = !wrongOnly || count > 0;
     }
+
+    $("review-all").addEventListener("click", () => renderReview());
+    $("review-wrong").addEventListener("click", () => renderReview("wrong"));
 
     $("next").addEventListener("click", () => {
       if (!answered) return;
@@ -407,6 +441,7 @@
       $("result").hidden = true;
       $("quiz").hidden = false;
       document.querySelector(".review").open = false;
+      renderReview();
       $("bottom-note").textContent = "시간 제한 없이, 호기심이 이끄는 대로.";
       renderQuestion(true);
       $("quiz").scrollIntoView({ behavior: "auto", block: "nearest" });
